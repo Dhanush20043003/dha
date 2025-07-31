@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard - Expense Tracker</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Expense Dashboard</h1>
+
+    <div class="section">
+      <h2>Add Expense</h2>
+      <input id="title" placeholder="Title" />
+      <input id="amount" type="number" placeholder="Amount" />
+      <input id="category" placeholder="Category" />
+      <input id="date" type="date" />
+      <button onclick="addExpense()">Add</button>
+      <p id="add-status" class="status"></p>
+    </div>
+
+    <div class="section">
+      <h2>Monthly Summary</h2>
+      <button onclick="getSummary()">Get Summary</button>
+      <div class="output" id="summary-output"></div>
+    </div>
+
+    <div class="section">
+      <h2>Category Breakdown</h2>
+      <canvas id="categoryChart" width="400" height="200"></canvas>
+    </div>
+
+    <div class="section">
+      <h2>Monthly Spending</h2>
+      <canvas id="monthlyChart" width="400" height="200"></canvas>
+    </div>
+
+    <div style="text-align:center; margin-top:30px;">
+      <button onclick="logout()" style="background:#ff4d4d">Logout</button>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:5000/api';
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    }
+
+    function addExpense() {
+      const title = document.getElementById('title').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const category = document.getElementById('category').value;
+      const date = document.getElementById('date').value;
+
+      fetch(`${API}/expenses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ title, amount, category, date })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data._id) {
+          document.getElementById('add-status').innerText = '✅ Expense added!';
+        } else {
+          document.getElementById('add-status').innerText = '❌ Error adding expense.';
+        }
+      });
+    }
+
+    function getSummary() {
+      fetch(`${API}/expenses/summary/monthly`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      })
+      .then(res => res.json())
+      .then(data => {
+        let result = '';
+        const monthlyLabels = [];
+        const monthlyData = [];
+
+        for (let month in data) {
+          const info = data[month];
+          monthlyLabels.push(month);
+          monthlyData.push(info.spent || 0);
+
+          result += `📅 ${month}: ₹${info.spent || 0}`;
+          if (info.limit !== undefined) {
+            result += ` / ₹${info.limit} ${info.overBudget ? '⚠️ Over Budget!' : '✅ Within Budget'}`;
+          }
+          result += '\n';
+        }
+        document.getElementById('summary-output').innerText = result;
+
+        renderMonthlyChart(monthlyLabels, monthlyData);
+      });
+
+      fetch(`${API}/expenses/summary`, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      })
+      .then(res => res.json())
+      .then(summary => {
+        const categories = Object.keys(summary.categoryBreakdown);
+        const values = Object.values(summary.categoryBreakdown);
+
+        renderCategoryChart(categories, values);
+      });
+    }
+
+    function renderCategoryChart(labels, data) {
+      const ctx = document.getElementById('categoryChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Expenses by Category',
+            data: data,
+            backgroundColor: ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#00b894'],
+          }]
+        },
+      });
+    }
+
+    function renderMonthlyChart(labels, data) {
+      const ctx = document.getElementById('monthlyChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Monthly Spending (₹)',
+            data: data,
+            backgroundColor: '#0984e3'
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
